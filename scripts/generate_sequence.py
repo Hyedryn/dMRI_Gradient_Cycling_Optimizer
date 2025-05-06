@@ -43,7 +43,7 @@ def main():
         )
         print(f"\nSuccessfully generated tensor file: {tensor_dat_path}")
     except ImportError as e:
-         print(f"\nError: {e}. Make sure 'qspace' and 'matplotlib' are installed (`pip install qspace matplotlib`).")
+         print(f"\nError: {e}. Make sure 'qspace' and 'matplotlib' are installed.")
          sys.exit(1)
     except Exception as e:
         print(f"\nError during sequence generation: {e}")

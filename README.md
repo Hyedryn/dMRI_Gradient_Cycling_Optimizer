@@ -130,6 +130,38 @@ python scripts/generate_sequence.py output/my_new_scheme \
 ```
 This will create `output/my_new_scheme_samples.txt` and `output/my_new_scheme_tensor.dat`.
 
+## (Optional) Slice Timing Generation for Custom Eddy
+
+The script `scripts/generate_slice_timing.py` generates slice timing files (e.g., `GE_X_slspec.txt`) required by some custom versions of FSL's Eddy tool, particularly those adapted for GE gradient cycling sequences.
+
+The script is run from the command line with arguments:
+```bash
+python scripts/generate_slice_timing.py \
+    --mb <multiband_factor> \
+    --gc_tr <gc_block_size> \
+    --nvols <total_volumes> \
+    --nslice <total_slices> \
+    --output_dir <path_to_output_directory>
+```
+**Arguments:**
+
+*   `--mb MB`: Multiband factor (integer).
+*   `--gc_tr GC_TR`: Gradient Cycling TR block size (number of volumes in one gradient cycle, e.g., 2 or 3).
+*   `--nvols NVOLS`: Total number of volumes in the acquisition (includes the initial non-cycled volume 0).
+*   `--nslice NSLICE`: Total number of physical slices in the imaging volume.
+*   `--output_dir OUTPUT_DIR`: Directory where the generated `GE_X_slspec.txt` files will be saved.
+
+**Example:**
+
+```bash
+python scripts/generate_slice_timing.py \
+    --mb 3 \
+    --gc_tr 3 \
+    --nvols 169 \
+    --nslice 69 \
+    --output_dir sliceTiming/my_3TR_slspec
+```
+
 ## Citation
 
 If you use this software in your research, please cite the relevant thesis/publication:
