@@ -110,7 +110,7 @@ The tool expects input files in the GE `tensor.dat` format. This typically inclu
 *   Header lines starting with `#`.
 *   A line indicating the number of directions in the subsequent block.
 *   Lines containing the X, Y, Z components of each gradient vector for that block.
-The optimizer primarily works on the first block of directions found after the header.
+The optimizer works on the biggest block of directions found.
 
 ## Optimizers Available
 
