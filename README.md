@@ -16,7 +16,7 @@ This repository provides tools to reorder the gradient vectors within a standard
 
 The primary cost function minimized (`eval_ge_cycling_cost`) calculates the sum of absolute dot products between pairs of gradient vectors within each group. Minimizing this cost aims to maximize the angular separation between subsequent gradient applications within a group, thus reducing coherent gradient effects contributing to heating.
 
-Several optimization algorithms are provided, with `smart_brute_force` being the default method, focusing permutations on the highest-cost group.
+Several optimization algorithms are provided, with `iterated_local_search` being the default method.
 
 ## Installation
 
