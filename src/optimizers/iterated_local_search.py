@@ -3,13 +3,13 @@ import random
 from tqdm import tqdm
 from ..cost import eval_ge_cycling_cost # Use relative import
 
-def _local_search_swap(current_vectors, group_size, weight_total_power, max_no_improve=50):
+def _local_search_swap(current_vectors, group_size, weight_total_power, weight_adjacent_group, max_no_improve=50):
     """
     Performs a simple local search by randomly swapping non-b0 pairs.
     Stops after 'max_no_improve' swaps without finding a better solution.
     """
     best_vectors = np.copy(current_vectors)
-    best_cost, _, _ = eval_ge_cycling_cost(best_vectors, group_size, weight_total_power)
+    best_cost, _, _ = eval_ge_cycling_cost(best_vectors, group_size, weight_total_power, weight_adjacent_group)
 
     non_b0_indices = np.where(np.any(best_vectors != 0, axis=1))[0]
     if len(non_b0_indices) < 2:
@@ -25,7 +25,7 @@ def _local_search_swap(current_vectors, group_size, weight_total_power, max_no_i
         temp_vectors[[idx1, idx2]] = temp_vectors[[idx2, idx1]]
 
         # Evaluate cost
-        current_cost, _, _ = eval_ge_cycling_cost(temp_vectors, group_size, weight_total_power)
+        current_cost, _, _ = eval_ge_cycling_cost(temp_vectors, group_size, weight_total_power, weight_adjacent_group)
 
         # If improvement found, accept the swap and reset counter
         if current_cost < best_cost:
@@ -64,7 +64,8 @@ def iterated_local_search(
     n_iter=100, # Number of ILS iterations (Perturb + Local Search)
     local_search_depth=50, # Max swaps without improvement in local search
     perturbation_strength=5, # Number of random swaps in perturbation
-    weight_total_power=0
+    weight_total_power=0,
+    weight_adjacent_group=0,
     ):
     """
     Optimizes gradient order using Iterated Local Search.
@@ -76,6 +77,7 @@ def iterated_local_search(
         local_search_depth (int): Max swaps without improvement in local search phase.
         perturbation_strength (int): Number of random swaps during perturbation.
         weight_total_power (float): Weight for the total power term in cost function.
+        weight_adjacent_group (float): Weight for the adjacent group term in cost function.
 
     Returns:
         np.ndarray: Optimized vector sequence.
@@ -85,8 +87,8 @@ def iterated_local_search(
     # 1. Initial Solution (can be the input or random)
     # Let's start with the input and improve it first
     print(" Performing initial local search...")
-    current_best_vectors = _local_search_swap(vectors, group_size, weight_total_power, local_search_depth*2) # Deeper initial search
-    current_best_cost, max_idx, _ = eval_ge_cycling_cost(current_best_vectors, group_size, weight_total_power)
+    current_best_vectors = _local_search_swap(vectors, group_size, weight_total_power, weight_adjacent_group, local_search_depth*2) # Deeper initial search
+    current_best_cost, max_idx, _ = eval_ge_cycling_cost(current_best_vectors, group_size, weight_total_power, weight_adjacent_group)
     print(f" Initial cost after local search: {current_best_cost:.4f}")
 
     overall_best_vectors = np.copy(current_best_vectors)
@@ -99,8 +101,8 @@ def iterated_local_search(
         perturbed = _perturb_solution(current_best_vectors, perturbation_strength)
 
         # b. Local Search on perturbed solution
-        locally_optimized = _local_search_swap(perturbed, group_size, weight_total_power, local_search_depth)
-        new_cost, new_max_idx, _ = eval_ge_cycling_cost(locally_optimized, group_size, weight_total_power)
+        locally_optimized = _local_search_swap(perturbed, group_size, weight_total_power, weight_adjacent_group, local_search_depth)
+        new_cost, new_max_idx, _ = eval_ge_cycling_cost(locally_optimized, group_size, weight_total_power, weight_adjacent_group)
 
         # c. Acceptance Criterion (Accept if better than current best)
         if new_cost < current_best_cost:

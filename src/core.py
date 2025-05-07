@@ -9,6 +9,9 @@ def optimize_gradient_sequence(
     output_tensor_path,
     method='smart_brute_force',
     group_size=3,
+    n_dirs_selected=None,
+    weight_total_power=0,
+    weight_adjacent_group=0,
     optimizer_kwargs=None
 ):
     """
@@ -20,6 +23,8 @@ def optimize_gradient_sequence(
         method (str): Name of the optimization method to use
                       (e.g., 'smart_brute_force').
         group_size (int): TR group size (typically 2 or 3).
+        weight_total_power (float): Weight for the total power term in cost function.
+        weight_adjacent_group (float): Weight for the adjacent group term in cost function.
         optimizer_kwargs (dict, optional): Additional keyword arguments specific
                                            to the chosen optimizer
                                            (e.g., n_iter, N_to_permute). Defaults to None.
@@ -31,7 +36,7 @@ def optimize_gradient_sequence(
         optimizer_kwargs = {}
 
     print(f"Loading tensor file: {input_tensor_path}")
-    vectors, n_dirs, header, all_lines = io.read_tensor_dat(input_tensor_path)
+    vectors, n_dirs, header, all_lines = io.read_tensor_dat(input_tensor_path, n_dirs_selected)
     print(f"Read {n_dirs} directions.")
 
     if n_dirs % group_size != 0:
@@ -44,7 +49,7 @@ def optimize_gradient_sequence(
          padded_vectors = vectors
          n_missing = 0
 
-    base_cost, max_group_idx, _ = cost.eval_ge_cycling_cost(padded_vectors, group_size)
+    base_cost, max_group_idx, _ = cost.eval_ge_cycling_cost(padded_vectors, group_size, weight_total_power, weight_adjacent_group)
     print(f"Initial Max Cost: {base_cost:.4f} (Group Index: {max_group_idx})")
 
     print(f"Optimizing using method: {method} with group size: {group_size}")
@@ -57,7 +62,7 @@ def optimize_gradient_sequence(
         raise ValueError(f"Unknown optimization method: {method}. Available methods: {dir(optimizers)}")
 
     # Pass group_size and other kwargs to the optimizer
-    optimized_padded_vectors = optimizer_func(padded_vectors, group_size=group_size, **optimizer_kwargs)
+    optimized_padded_vectors = optimizer_func(padded_vectors, group_size=group_size, weight_total_power=weight_total_power, weight_adjacent_group=weight_adjacent_group, **optimizer_kwargs)
 
     # Remove padding if it was added
     if n_missing > 0:
@@ -73,7 +78,7 @@ def optimize_gradient_sequence(
     else:
          print("Optimization complete. Vector elements verified.")
 
-    final_cost, final_max_idx, _ = cost.eval_ge_cycling_cost(optimized_vectors, group_size)
+    final_cost, final_max_idx, _ = cost.eval_ge_cycling_cost(optimized_vectors, group_size, weight_total_power, weight_adjacent_group)
     print(f"Final Max Cost: {final_cost:.4f} (Group Index: {final_max_idx})")
 
 

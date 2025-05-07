@@ -5,7 +5,7 @@ from ..cost import eval_ge_cycling_cost
 from math import factorial
 
 
-def smart_brute_force(vectors, group_size=3, n_iter=10000, N_to_permute=6, weight_total_power=0):
+def smart_brute_force(vectors, group_size=3, n_iter=10000, N_to_permute=6, weight_total_power=0, weight_adjacent_group=0):
     """
     Optimizes gradient order using a smarter brute-force approach.
 
@@ -18,6 +18,7 @@ def smart_brute_force(vectors, group_size=3, n_iter=10000, N_to_permute=6, weigh
         n_iter (int): Number of iterations.
         N_to_permute (int): Number of vectors to include in each permutation subset (4-8 recommended).
         weight_total_power (float): Weight for the total power term in cost function.
+        weight_adjacent_group (float): Weight for the adjacent group term in cost function.
 
     Returns:
         np.ndarray: Optimized vector sequence.
@@ -31,7 +32,7 @@ def smart_brute_force(vectors, group_size=3, n_iter=10000, N_to_permute=6, weigh
         raise ValueError(f"Number of directions ({N_direction}) must be divisible by group size ({group_size}).")
 
     N_groups = N_direction // group_size
-    best_cost_function, max_group_idx, _ = eval_ge_cycling_cost(current_permutation, group_size, weight_total_power)
+    best_cost_function, max_group_idx, _ = eval_ge_cycling_cost(current_permutation, group_size, weight_total_power, weight_adjacent_group)
     print(f"Initial Max Cost: {best_cost_function:.4f} (Group Index: {max_group_idx})")
 
     # Indices that are not b=0 vectors
@@ -94,7 +95,7 @@ def smart_brute_force(vectors, group_size=3, n_iter=10000, N_to_permute=6, weigh
             temp_permutation[indices_to_permute] = perm # Apply permutation
 
             # Calculate cost for this specific permutation
-            new_cost_function, new_max_group_idx, _ = eval_ge_cycling_cost(temp_permutation, group_size, weight_total_power)
+            new_cost_function, new_max_group_idx, _ = eval_ge_cycling_cost(temp_permutation, group_size, weight_total_power, weight_adjacent_group)
 
             # Check if this permutation is better than the best found *in this subset*
             if new_cost_function < min_cost_in_subset:

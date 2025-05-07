@@ -66,6 +66,9 @@ python scripts/optimize_sequence.py <input_tensor.dat> <output_tensor.dat> [opti
 
 *   `-m METHOD`, `--method METHOD`: Optimization algorithm (default: `iterated_local_search`). See available methods below.
 *   `-g GROUP_SIZE`, `--group_size GROUP_SIZE`: TR group size (2 or 3, default: 3).
+*   `--weight_total_power WEIGHT_TOTAL_POWER`: Weight for the total power term in cost function (default: 0.05).
+*   `--weight_adjacent_group WEIGHT_ADJACENT_GROUP`: Weight for the adjacent group term in cost function (default: 0.1).
+*   `--n_dirs N_DIR`: Specify the number of directions for the sequence to optimize within the tensor file. If not provided, the script will optimize the sequence with the largest number of directions found in the file. If a number is provided, the first sequence found with exactly this many directions will be targeted for optimization (default: None).
 *   `--n_iter N_ITER`: Number of iterations for the optimizer (default: 10000).
 *   `--n_permute N_PERMUTE`: Number of vectors to permute in each `smart_brute_force` step (default: 6).
 *   `--ils_depth ILS_DEPTH`: Local search depth (max swaps without improvement) for ILS (default: 50).
@@ -87,6 +90,7 @@ from src import core
 input_file = "data/my_original_tensor.dat"
 output_file = "output/my_optimized_tensor_2TR.dat"
 group = 2
+n_dirs = None
 method_name = 'iterated_local_search'
 opt_kwargs = {'n_iter': 20000, 'ils_depth': 50, 'ils_perturb': 5}
 
@@ -96,6 +100,7 @@ try:
         output_tensor_path=output_file,
         method=method_name,
         group_size=group,
+		n_dirs=n_dirs,
         optimizer_kwargs=opt_kwargs
     )
     print("Optimization successful!")

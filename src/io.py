@@ -4,18 +4,23 @@ import datetime
 import os
 
 
-def read_tensor_dat(file_path):
+def read_tensor_dat(file_path, n_dirs_selected=None):
     """
-    Reads a GE tensor.dat file and extracts the scheme with the largest
-    number of directions.
+    Reads a GE tensor.dat file.
+    If n_dirs_selected is None, it extracts the scheme with the largest number of directions.
+    If n_dirs_selected is an integer, it attempts to extract the first scheme found
+    with exactly that many directions.
 
     Args:
         file_path (str): Path to the tensor.dat file.
+        n_dirs_selected (int, optional): If specified, look for a block with
+                                         this specific number of directions.
+                                         Defaults to None (find largest block).
 
     Returns:
         tuple: A tuple containing:
-            - np.ndarray: Array of gradient vectors [N_directions, 3] for the largest scheme.
-            - int: Number of directions in the largest scheme found.
+            - np.ndarray: Array of gradient vectors [N_directions, 3] for the selected/largest scheme.
+            - int: Number of directions in the selected/largest scheme found.
             - list: Header lines from the file.
             - list: All lines read from the file (for reconstruction).
     """
@@ -28,34 +33,42 @@ def read_tensor_dat(file_path):
     all_lines = [line for line in lines]  # Keep original lines with endings
     header_lines = [line for line in lines if line.strip().startswith("#")]
 
-    blocks_found = []  # Store tuples: (num_dirs, start_line_index)
-    current_line_index = 0
+    blocks_found = []  # Store tuples: (num_dirs, start_line_index_of_num_dirs_line, vector_start_line_index)
+    current_line_idx = 0
 
-    # --- Pass 1: Identify all potential blocks and their sizes ---
-    while current_line_index < len(lines):
-        line = lines[current_line_index].strip()
+    # --- Pass 1: Identify all potential blocks, their sizes, and their start indices ---
+    while current_line_idx < len(lines):
+        line_content_stripped = lines[current_line_idx].strip()
 
         # Skip headers and empty lines
-        if line.startswith("#") or not line:
-            current_line_index += 1
+        if line_content_stripped.startswith("#") or not line_content_stripped:
+            current_line_idx += 1
             continue
 
         # Check if this line indicates the number of directions for a block
         try:
-            num_directions = int(line)
-            if num_directions <= 0:
-                raise ValueError("Number of directions must be positive.")
-            # Store the number of directions and the index of the *next* line (start of vectors)
-            vector_start_index = current_line_index + 1
-            blocks_found.append((num_directions, vector_start_index))
+            num_directions_in_block = int(line_content_stripped)
+            if num_directions_in_block <= 0:
+                # This could be a negative number or zero, which isn't a valid count.
+                # It might be part of a vector if parsing went wrong, or just invalid.
+                # For robustness, let's assume it's not a block start and move on.
+                # A more strict parser might raise an error here.
+                current_line_idx += 1
+                continue
+
+            # Store the number of directions, the index of THIS line,
+            # and the index of the *next* line (start of vectors)
+            vector_data_start_index = current_line_idx + 1
+            blocks_found.append((num_directions_in_block, current_line_idx, vector_data_start_index))
 
             # Skip past the vector lines for this block to find the next block size indicator
-            current_line_index += num_directions + 1
+            current_line_idx += num_directions_in_block + 1
 
         except ValueError:
-            # This line is not a valid number of directions indicator, might be a vector or junk
-            # Move to the next line, assuming standard format adherence
-            current_line_index += 1
+            # This line is not a valid number of directions indicator.
+            # It could be a vector line from a previous block if the count was off,
+            # or just a malformed line.
+            current_line_idx += 1
         except IndexError:
             # Reached end of file prematurely after reading num_directions
             break
@@ -63,52 +76,91 @@ def read_tensor_dat(file_path):
     if not blocks_found:
         raise ValueError("No valid direction blocks found in the tensor file.")
 
-    # --- Find the block with the maximum number of directions ---
-    largest_block = max(blocks_found, key=lambda item: item[0])
-    max_num_directions, vector_start_idx = largest_block
+    # --- Select the target block ---
+    target_block_info = None
+    if n_dirs_selected is not None:
+        # User specified a number of directions to find
+        for block in blocks_found:
+            if block[0] == n_dirs_selected:
+                target_block_info = block
+                break # Found the first matching block
+        if target_block_info is None:
+            raise ValueError(f"No block found with exactly {n_dirs_selected} directions. "
+                             f"Available block sizes: {[b[0] for b in blocks_found]}")
+    else:
+        # User did not specify, find the largest block
+        if not blocks_found: # Should be caught above, but defensive
+             raise ValueError("No blocks found to determine the largest.")
+        target_block_info = max(blocks_found, key=lambda item: item[0])
 
-    # --- Pass 2: Extract vectors for the largest block ---
+    actual_num_directions, _, vector_start_idx_for_extraction = target_block_info
+
+    # --- Pass 2: Extract vectors for the selected block ---
     tensors = []
-    vectors_read = 0
-    if vector_start_idx >= len(lines):
+    vectors_read_count = 0
+
+    if vector_start_idx_for_extraction >= len(lines):
         raise ValueError(
-            f"Tensor file format error: Declared start index {vector_start_idx} for largest block is out of bounds.")
+            f"Tensor file format error: Declared vector start index "
+            f"{vector_start_idx_for_extraction} for block with {actual_num_directions} "
+            f"directions is out of bounds (file has {len(lines)} lines).")
 
-    for i in range(vector_start_idx, len(lines)):
-        if vectors_read >= max_num_directions:
-            break  # Stop after reading the expected number
+    # Read exactly 'actual_num_directions' vectors starting from 'vector_start_idx_for_extraction'
+    for i in range(vector_start_idx_for_extraction, len(lines)):
+        if vectors_read_count >= actual_num_directions:
+            break  # Stop after reading the expected number for THIS block
 
-        line = lines[i].strip()
-        if not line:  # Skip empty lines within block if any
+        line_content_stripped = lines[i].strip()
+        if not line_content_stripped and vectors_read_count < actual_num_directions:
+            # An empty line within an expected vector block could be problematic.
+            # Depending on strictness, one might raise an error or issue a warning.
+            # For now, let's skip it and see if we still get enough vectors.
+            # This could lead to a warning/error later if not enough vectors are read.
+            print(f"Warning: Encountered empty line at line index {i} within expected vector data for block "
+                  f"of size {actual_num_directions}. Skipping.")
             continue
 
-        parts = line.split()
+        parts = line_content_stripped.split()
         if len(parts) == 3:
             try:
                 tensors.append([float(p) for p in parts])
-                vectors_read += 1
+                vectors_read_count += 1
             except ValueError:
-                # Found non-numeric data where a vector was expected
-                raise ValueError(f"Invalid vector data found at line {i + 1} in the largest block: '{line}'")
+                raise ValueError(
+                    f"Invalid vector data (non-numeric) found at line {i + 1} (index {i}) "
+                    f"in block expecting {actual_num_directions} directions: '{line_content_stripped}'")
         else:
-            # Found a line that isn't 3 components long where a vector was expected
-            # This might indicate the start of the next block indicator or a file error
-            break  # Assume end of vector block
+            # Found a line that isn't 3 components long where a vector was expected.
+            # This indicates either the end of the block or a malformed file.
+            print(
+                f"Warning: Expected 3 components for a vector at line {i + 1} (index {i}) "
+                f"but found {len(parts)} components: '{line_content_stripped}'. "
+                f"Stopping read for this block of {actual_num_directions} directions "
+                f"after reading {vectors_read_count} vectors.")
+            break # Assume end of this specific vector block
 
-    if vectors_read != max_num_directions:
+    if vectors_read_count != actual_num_directions:
         print(
-            f"Warning: Expected {max_num_directions} directions for the largest block, but only read {vectors_read}. Check file format near line {vector_start_idx + vectors_read}.")
-        # Adjust max_num_directions if fewer were read than expected
-        max_num_directions = vectors_read
+            f"Warning: Expected {actual_num_directions} directions for the selected block, "
+            f"but only read {vectors_read_count}. This might occur if the block is "
+            f"truncated or contains malformed lines. "
+            f"File: '{file_path}', expected block started at line index {vector_start_idx_for_extraction-1}.")
+        # Adjust actual_num_directions to what was actually read for this block
+        # This is important so that the returned number of directions matches the tensor_np shape.
+        actual_num_directions = vectors_read_count
 
     tensors_np = np.array(tensors)
-    if tensors_np.shape != (max_num_directions, 3):
-        # This check might be redundant if max_num_directions was adjusted, but keep for safety
+
+    # Final check on the shape of the extracted tensor data
+    if tensors_np.ndim == 1 and actual_num_directions == 0 : # Handle case of empty block successfully read as empty
+         tensors_np = tensors_np.reshape(0,3) # ensure it's 2D [0,3]
+    elif tensors_np.shape != (actual_num_directions, 3):
         raise ValueError(
-            f"Shape mismatch for largest block: Expected ({max_num_directions}, 3), got {tensors_np.shape}")
+            f"Shape mismatch for the extracted block: Expected ({actual_num_directions}, 3) "
+            f"based on (potentially adjusted) count, but got {tensors_np.shape}. "
+            f"This indicates a severe parsing issue or file corruption for the selected block.")
 
-    return tensors_np, max_num_directions, header_lines, all_lines
-
+    return tensors_np, actual_num_directions, header_lines, all_lines
 
 def write_tensor_dat(output_path, optimized_tensors, original_num_directions, all_original_lines):
     """
